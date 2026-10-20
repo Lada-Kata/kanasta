@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);background:#1f5b45}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<link rel="stylesheet" href="app.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kanasta">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1f5b45">
+<script>if("serviceWorker" in navigator && location.protocol==="https:"){addEventListener("load",()=>navigator.serviceWorker.register("sw.js"))}</script>
+<title>Kanasta skóre</title>
+<style>
+/* Layout: plstěný pruh se stavem hry nahoře, pod ním dva sloupce hráčů pro zadání kola, dole historie kol */
+:root{
+  --bg:#f3f5f1; --surface:#ffffff; --sunk:#eef2ee; --fg:#1d2621; --muted:#5b6a61; --line:#d9e0da;
+  --felt:#1f5b45; --felt-fg:#f2f7f3; --red:#b3262f; --gold:#b5852a; --ok:#2f7a4f;
+  --shadow:0 1px 2px rgb(20 40 30 / .08),0 4px 14px rgb(20 40 30 / .07);
+  --display:"Fraunces",Georgia,serif; --body:"Figtree",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111814; --surface:#1a231e; --sunk:#141c18; --fg:#e8eee9; --muted:#9aaba0; --line:#2c3a32;
+  --felt:#16402f; --felt-fg:#e8f2ec; --red:#ef6b72; --gold:#e0b45a; --ok:#6fcf97;
+  --shadow:0 1px 2px rgb(0 0 0 / .4); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111814; --surface:#1a231e; --sunk:#141c18; --fg:#e8eee9; --muted:#9aaba0; --line:#2c3a32;
+  --felt:#16402f; --felt-fg:#e8f2ec; --red:#ef6b72; --gold:#e0b45a; --ok:#6fcf97;
+  --shadow:0 1px 2px rgb(0 0 0 / .4); color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:16px/1.5 var(--body)}
+h1,h2,h3{font-family:var(--display);margin:0;line-height:1.15;text-wrap:balance}
+p{margin:0}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+header{background:var(--felt);color:var(--felt-fg);padding-inline:16px;padding-block:24px 28px}
+.in{max-width:900px;margin:0 auto}
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+header h1{font-size:clamp(1.8rem,5vw,2.4rem);font-weight:800}
+header h1 .r{color:#ff8f95}
+.goal{font-size:.88rem;opacity:.85}
+.board{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}
+.tot{background:rgb(255 255 255 / .08);border:1px solid rgb(255 255 255 / .18);border-radius:14px;padding:14px 16px;display:grid;gap:6px;min-width:0}
+.tot input{background:transparent;border:0;border-bottom:1px dashed rgb(255 255 255 / .35);color:var(--felt-fg);font-weight:700;font-size:1rem;padding:2px 0;width:100%;min-width:0}
+.tot .num{font-family:var(--display);font-size:clamp(2.2rem,8vw,3.2rem);font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+.bar{height:6px;border-radius:3px;background:rgb(255 255 255 / .15);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--gold);width:0;transition:width .4s}
+.meta{font-size:.82rem;opacity:.85;font-variant-numeric:tabular-nums}
+.win{margin-top:14px;background:var(--gold);color:#1d2621;border-radius:10px;padding:10px 14px;font-weight:700}
+
+.wrap{max-width:900px;margin:0 auto;padding-inline:16px;padding-block:24px 64px;display:grid;gap:28px}
+.sec-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+h2{font-size:1.4rem;font-weight:800}
+.hint{color:var(--muted);font-size:.9rem}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.pl{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:16px;display:grid;gap:12px;min-width:0}
+.pl h3{font-size:1.15rem}
+.row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px}
+.row label{font-size:.95rem}
+.row small{display:block;color:var(--muted);font-size:.78rem}
+.step{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--sunk)}
+.step button{border:0;background:transparent;width:36px;height:36px;font-size:1.15rem;cursor:pointer}
+.step button:hover{background:var(--line)}
+.step output{min-width:32px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+.numin{width:96px;padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:var(--sunk);text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.chk{display:flex;align-items:center;gap:8px;font-size:.92rem;cursor:pointer}
+.chk input{width:18px;height:18px;accent-color:var(--felt);flex:none}
+.endrow{display:grid;gap:6px;padding:10px 12px;border:1px solid var(--gold);border-radius:12px;background:var(--sunk)}
+.chk.sm{font-size:.85rem;color:var(--muted)}
+.cc{display:grid;gap:10px;padding:12px;background:var(--sunk);border-radius:12px;border:1px solid var(--line)}
+.cc.off{opacity:.45}
+.cc-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.cc-h small{display:block;color:var(--muted);font-size:.78rem}
+.cc-h output{font-family:var(--display);font-weight:800;font-size:1.35rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cc.hand .cc-h output{color:var(--red)}
+.cgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.cin{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px 6px 6px 10px;cursor:text;min-width:0}
+.cin span{font-size:.88rem;font-weight:600;line-height:1.2;min-width:0}
+.cin small{display:block;font-weight:400;color:var(--muted);font-size:.74rem}
+.cin input{width:56px;flex:none;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--sunk);text-align:right;font-weight:700;font-size:1.05rem;font-variant-numeric:tabular-nums}
+.cin input:focus{border-color:var(--felt)}
+hr{border:0;border-top:1px solid var(--line);margin:0}
+.sum{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding-top:4px}
+.sum span{color:var(--muted);font-size:.85rem}
+.sum b{font-family:var(--display);font-size:1.8rem;font-variant-numeric:tabular-nums}
+.sum b.neg{color:var(--red)}
+.brk{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.endbox{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;flex-wrap:wrap}
+.seg label{padding:7px 14px;cursor:pointer;font-size:.92rem;border-right:1px solid var(--line)}
+.seg label:last-child{border-right:0}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:has(input:checked){background:var(--felt);color:var(--felt-fg);font-weight:700}
+.seg label:has(input:focus-visible){outline:2px solid var(--gold);outline-offset:-2px}
+.warn{color:var(--red);font-size:.88rem;font-weight:600}
+
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.btn{border:0;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer}
+.btn.pri{background:var(--felt);color:var(--felt-fg)}
+.btn.pri:hover{filter:brightness(1.1)}
+.btn.ghost{background:transparent;border:1px solid var(--line)}
+.btn.ghost:hover{background:var(--sunk)}
+.btn.danger{background:var(--red);color:#fff}
+
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:420px;font-variant-numeric:tabular-nums}
+th,td{padding:9px 14px;border-bottom:1px solid var(--line);text-align:right}
+th:first-child,td:first-child{text-align:left}
+tr:last-child td{border-bottom:0}
+th{font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+td .sub{color:var(--muted);font-size:.82rem;margin-left:6px}
+td.neg{color:var(--red)}
+.empty{padding:18px;color:var(--muted);text-align:center}
+.confirm{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--red);border-radius:12px;padding:12px 14px}
+@media (max-width:520px){.board{gap:8px}.tot{padding:12px}}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+
+</head>
+<body>
+<header>
+  <div class="in">
+    <div class="top">
+      <h1>Kanasta <span class="r">♥</span> skóre</h1>
+      <span class="goal">2 hráči · hraje se do 5 000 bodů</span>
+    </div>
+    <div class="board" id="board"></div>
+    <div class="win" id="win" hidden></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section style="display:grid;gap:14px">
+    <div class="sec-h">
+      <h2 id="roundTitle">Kolo 1</h2>
+      <span class="hint">Zadej výsledek kola, body se sčítají průběžně.</span>
+    </div>
+
+    <div class="cols" id="players"></div>
+
+    <div class="actions">
+      <button class="btn pri" id="save">Zapsat kolo</button>
+      <button class="btn ghost" id="clear">Vymazat zadání</button>
+    </div>
+  </section>
+
+  <section style="display:grid;gap:14px">
+    <div class="sec-h">
+      <h2>Zapsaná kola</h2>
+      <div class="actions">
+        <button class="btn ghost" id="undo">Smazat poslední kolo</button>
+        <button class="btn ghost" id="newGame">Nová hra</button>
+      </div>
+    </div>
+    <div class="confirm" id="confirmBox" hidden>
+      <span>Opravdu začít novou hru? Všechna kola se smažou.</span>
+      <button class="btn danger" id="confirmYes">Ano, nová hra</button>
+      <button class="btn ghost" id="confirmNo">Zrušit</button>
+    </div>
+    <div class="tbl"><table>
+      <thead><tr><th>Kolo</th><th data-name="0">Láďa</th><th data-name="1">Káťa</th></tr></thead>
+      <tbody id="hist"></tbody>
+    </table></div>
+  </section>
+</main>
+
+<script>
+const GOAL = 5000;
+const CARDS = [
+  ["lo","4 až 7","",5],["hi","8 až K","",10],
+  ["ace","Esa","",20],["two","Dvojky","",20],
+  ["jok","Žolíci","",50],["b3","Černé trojky","",5]
+];
+const KEY = "kanasta-skore-v1";
+
+const DEF_NAMES = ["Láďa","Káťa"];
+let state = load() || { names:[...DEF_NAMES], rounds:[] };
+[0,1].forEach(i=>{ if(!state.names[i] || state.names[i]===`Hráč ${i+1}`) state.names[i] = DEF_NAMES[i]; });
+const CUR_KEY = "kanasta-kolo-v1";
+function loadCur(){ try{ const c = JSON.parse(localStorage.getItem(CUR_KEY)); return c && Array.isArray(c.p) && c.p.length===2 && c.p.every(x=>x && x.tc && x.hc) ? c : null; }catch(e){ return null; } }
+function saveCur(){ try{ localStorage.setItem(CUR_KEY, JSON.stringify(cur)); }catch(e){} }
+let cur = loadCur() || blankRound();
+
+function blankPlayer(){ return { clean:0, mixed:0, r3:0, none:false, table:0, hand:0, tc:{}, hc:{} }; }
+function blankRound(){ return { ender:0, concealed:false, p:[blankPlayer(), blankPlayer()] }; }
+function load(){ try{ const s = JSON.parse(localStorage.getItem(KEY)); return s && Array.isArray(s.rounds) ? s : null; }catch(e){ return null; } }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+
+function totals(){
+  const t=[0,0];
+  state.rounds.forEach(r=>{ t[0]+=r.s[0]; t[1]+=r.s[1]; });
+  return t;
+}
+function minMeld(score){
+  if(score<0) return 15;
+  if(score<1500) return 50;
+  if(score<3000) return 90;
+  return 120;
+}
+function score(pl, isEnder, concealed){
+  const r3base = pl.r3===4 ? 800 : pl.r3*100;
+  const parts = [];
+  let s = 0;
+  if(pl.none){
+    // nic nevyložil: červené trojky záporně, karty v ruce záporně
+    s = -r3base - pl.hand;
+    if(r3base) parts.push(`trojky −${r3base}`);
+    if(pl.hand) parts.push(`ruka −${pl.hand}`);
+    return { s, parts };
+  }
+  const c = pl.clean*500, m = pl.mixed*300, e = isEnder ? (concealed?200:100) : 0;
+  s = c + m + r3base + e + pl.table - pl.hand;
+  if(c) parts.push(`čisté ${c}`);
+  if(m) parts.push(`smíšené ${m}`);
+  if(r3base) parts.push(`trojky ${r3base}`);
+  if(e) parts.push(`konec ${e}`);
+  if(pl.table) parts.push(`stůl ${pl.table}`);
+  if(pl.hand) parts.push(`ruka −${pl.hand}`);
+  return { s, parts };
+}
+const fmt = n => (n<0?"−":"") + Math.abs(n).toLocaleString("cs-CZ");
+
+function stepper(id, val, max){
+  return `<span class="step"><button type="button" data-step="${id}" data-d="-1" aria-label="Ubrat">−</button><output id="${id}">${val}</output><button type="button" data-step="${id}" data-d="1" data-max="${max}" aria-label="Přidat">+</button></span>`;
+}
+function cardCalc(i, kind, title, hint){
+  return `<div class="cc ${kind==="h"?"hand":""}" id="cc-${kind}-${i}">
+    <div class="cc-h"><div><b>${title}</b><small>${hint}</small></div><output id="${kind}sum-${i}">${kind==="h"?"−":""}0</output></div>
+    <div class="cgrid">${
+      CARDS.map(([k,n,sub,v])=>`<label class="cin" for="${kind}-${k}-${i}"><span>${n}<small>${sub?sub+" · ":""}${v} b./ks</small></span><input type="number" inputmode="numeric" min="0" max="108" placeholder="0" id="${kind}-${k}-${i}"></label>`).join("")
+    }</div></div>`;
+}
+function buildPlayers(){
+  const html = [0,1].map(i=>`
+    <div class="pl">
+      <h3 data-name="${i}">${esc(state.names[i])}</h3>
+      <div class="row"><label>Čisté kanasty <small>500 b.</small></label>${stepper(`clean-${i}`,0,9)}</div>
+      <div class="row"><label>Smíšené kanasty <small>300 b.</small></label>${stepper(`mixed-${i}`,0,9)}</div>
+      <div class="row"><label>Červené trojky <small>100 b., všechny 4 = 800</small></label>${stepper(`r3-${i}`,0,4)}</div>
+      <div class="endrow">
+        <label class="chk"><input type="checkbox" id="end-${i}"><span><b>Ukončil kolo</b> +100</span></label>
+        <label class="chk sm"><input type="checkbox" id="conc-${i}"><span>Skrytý konec (+200 místo +100)</span></label>
+        <span class="warn" id="warn-${i}" hidden></span>
+      </div>
+      <hr>
+      ${cardCalc(i,"t","Karty na stole","počet kusů ve všech vyložených skupinách")}
+      ${cardCalc(i,"h","Karty v ruce","co zbylo v ruce, odečítá se")}
+      <label class="chk"><input type="checkbox" id="none-${i}">V kole nic nevyložil (trojky se odečtou)</label>
+      <hr>
+      <div class="sum"><span>Body za kolo</span><b id="rs-${i}">0</b></div>
+      <div class="brk" id="br-${i}"></div>
+    </div>`).join("");
+  document.getElementById("players").innerHTML = html;
+}
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function syncInputs(){
+  [0,1].forEach(i=>{
+    const p = cur.p[i];
+    ["clean","mixed","r3"].forEach(k=>document.getElementById(`${k}-${i}`).textContent=p[k]);
+    document.getElementById(`none-${i}`).checked = p.none;
+    CARDS.forEach(([k])=>{
+      document.getElementById(`t-${k}-${i}`).value = p.tc[k]||"";
+      document.getElementById(`h-${k}-${i}`).value = p.hc[k]||"";
+    });
+  });
+}
+
+function renderLive(){
+  saveCur();
+  [0,1].forEach(i=>{
+    const r = score(cur.p[i], cur.ender===i+1, cur.concealed);
+    const el = document.getElementById(`rs-${i}`);
+    el.textContent = fmt(r.s);
+    el.classList.toggle("neg", r.s<0);
+    document.getElementById(`br-${i}`).textContent = r.parts.join(" · ") || "Zatím nic nezadáno";
+    const p = cur.p[i];
+    document.getElementById(`tsum-${i}`).textContent = fmt(p.table);
+    document.getElementById(`hsum-${i}`).textContent = p.hand ? "−"+fmt(p.hand) : "0";
+    const tc = document.getElementById(`cc-t-${i}`);
+    tc.classList.toggle("off", p.none);
+    tc.querySelectorAll("input").forEach(x=>x.disabled=p.none);
+  });
+  [0,1].forEach(i=>{
+    const isE = cur.ender===i+1, p = cur.p[i];
+    document.getElementById(`end-${i}`).checked = isE;
+    const c = document.getElementById(`conc-${i}`);
+    c.checked = isE && cur.concealed;
+    const w = document.getElementById(`warn-${i}`);
+    if(isE && p.none){ w.textContent = "Kdo ukončil kolo, musel něco vyložit."; w.hidden=false; }
+    else w.hidden = true;
+  });
+}
+
+function renderBoard(){
+  const t = totals();
+  document.getElementById("board").innerHTML = [0,1].map(i=>`
+    <div class="tot">
+      <input id="name-${i}" value="${esc(state.names[i])}" aria-label="Jméno hráče ${i+1}" maxlength="20">
+      <div class="num">${fmt(t[i])}</div>
+      <div class="bar"><i style="width:${Math.max(0,Math.min(100,t[i]/GOAL*100))}%"></i></div>
+      <div class="meta">Do cíle: ${fmt(Math.max(0,GOAL-t[i]))} · první vyložení min. ${minMeld(t[i])}</div>
+    </div>`).join("");
+  [0,1].forEach(i=>{
+    document.getElementById(`name-${i}`).addEventListener("input",e=>{
+      state.names[i] = e.target.value || DEF_NAMES[i];
+      save(); renderNames();
+    });
+  });
+  const win = document.getElementById("win");
+  const over = t.map(x=>x>=GOAL);
+  if(over[0]||over[1]){
+    let wi = over[0]&&over[1] ? (t[0]===t[1]?-1:(t[0]>t[1]?0:1)) : (over[0]?0:1);
+    win.textContent = wi<0 ? `Remíza! Oba hráči mají ${fmt(t[0])} bodů.` : `🏆 Vyhrává ${state.names[wi]} s ${fmt(t[wi])} body.`;
+    win.hidden = false;
+  } else win.hidden = true;
+  document.getElementById("roundTitle").textContent = `Kolo ${state.rounds.length+1}`;
+}
+function renderNames(){
+  document.querySelectorAll("[data-name]").forEach(el=>el.textContent = state.names[+el.dataset.name]);
+  // jména ve výsledku vítěze
+  const t = totals();
+  if(!document.getElementById("win").hidden){
+    const wi = t[0]>=t[1]?0:1;
+    if(t[0]!==t[1]) document.getElementById("win").textContent = `🏆 Vyhrává ${state.names[wi]} s ${fmt(t[wi])} body.`;
+  }
+}
+function renderHist(){
+  const tb = document.getElementById("hist");
+  if(!state.rounds.length){ tb.innerHTML = `<tr><td colspan="3" class="empty">Zatím žádné kolo. Po zapsání se tu objeví body za kolo a průběžný součet.</td></tr>`; return; }
+  let run=[0,0];
+  tb.innerHTML = state.rounds.map((r,k)=>{
+    run=[run[0]+r.s[0], run[1]+r.s[1]];
+    const cell = i => `<td class="${r.s[i]<0?"neg":""}"><b>${fmt(run[i])}</b><span class="sub">${r.s[i]>=0?"+":""}${fmt(r.s[i])}</span></td>`;
+    return `<tr><td>${k+1}${r.ender?` <span class="sub">konec: ${esc(state.names[r.ender-1])}${r.concealed?" (skrytý)":""}</span>`:""}</td>${cell(0)}${cell(1)}</tr>`;
+  }).join("");
+}
+function renderAll(){ renderBoard(); renderNames(); renderHist(); renderLive(); }
+
+function cardSum(obj){ return CARDS.reduce((a,[k,,,v])=>a+(obj[k]||0)*v,0); }
+
+document.addEventListener("click",e=>{
+  const b = e.target.closest("[data-step]");
+  if(!b) return;
+  const id = b.dataset.step, d = +b.dataset.d;
+  const [k, is] = id.split("-"); const i = +is;
+  const p = cur.p[i]; const max = {clean:9,mixed:9,r3:4}[k];
+  p[k] = Math.max(0, Math.min(max, p[k]+d));
+  document.getElementById(id).textContent = p[k];
+  renderLive();
+});
+document.addEventListener("input",e=>{
+  const t = e.target; const m = t.id.match(/^(t|h)-(\w+)-(\d)$/);
+  if(!m) return;
+  const p = cur.p[+m[3]]; const obj = m[1]==="t" ? p.tc : p.hc;
+  obj[m[2]] = Math.max(0, Math.min(108, parseInt(t.value,10)||0));
+  if(m[1]==="t") p.table = cardSum(obj); else p.hand = cardSum(obj);
+  renderLive();
+});
+document.addEventListener("change",e=>{
+  const t = e.target;
+  let m = t.id.match(/^none-(\d)$/);
+  if(m){ cur.p[+m[1]].none = t.checked; renderLive(); return; }
+  m = t.id.match(/^end-(\d)$/);
+  if(m){ const i=+m[1]; cur.ender = t.checked ? i+1 : 0; if(!t.checked) cur.concealed=false; renderLive(); return; }
+  m = t.id.match(/^conc-(\d)$/);
+  if(m){ cur.concealed = t.checked; if(t.checked) cur.ender = +m[1]+1; renderLive(); }
+});
+
+document.getElementById("save").addEventListener("click",()=>{
+  const s = [0,1].map(i=>score(cur.p[i], cur.ender===i+1, cur.concealed).s);
+  state.rounds.push({ s, ender:cur.ender, concealed:cur.concealed });
+  save();
+  cur = blankRound(); syncInputs();
+  renderAll();
+});
+document.getElementById("clear").addEventListener("click",()=>{ cur = blankRound(); syncInputs(); renderLive(); });
+document.getElementById("undo").addEventListener("click",()=>{ state.rounds.pop(); save(); renderAll(); });
+const cb = document.getElementById("confirmBox");
+document.getElementById("newGame").addEventListener("click",()=>{ cb.hidden=false; });
+document.getElementById("confirmNo").addEventListener("click",()=>{ cb.hidden=true; });
+document.getElementById("confirmYes").addEventListener("click",()=>{
+  state.rounds=[]; save(); cb.hidden=true; cur=blankRound(); syncInputs(); renderAll();
+});
+
+buildPlayers(); syncInputs(); renderAll();
+</script>
+
+<div class="tabbar"><a href="pravidla.html" class="" onclick="location.replace(this.href);return false"><span class="ic">♠</span>Pravidla</a><a href="index.html" class="on" onclick="location.replace(this.href);return false"><span class="ic">♥</span>Skóre</a></div>
+</body>
+</html>
